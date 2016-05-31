@@ -1,3 +1,6 @@
+from __future__ import unicode_literals
+from __future__ import print_function
+
 import time
 import os
 import socket
@@ -6,6 +9,7 @@ import ctypes.util
 import pdb
 
 from pyssh2.errors import ReadError, WriteError, AuthError, ConnectionError
+from collections import namedtuple
 
 # Disconnect Codes (defined by SSH protocol)
 SSH_DISCONNECT = {'HOST_NOT_ALLOWED_TO_CONNECT'         : 1,
@@ -93,7 +97,12 @@ LIBSSH2_KNOWNHOST = {'TYPE_MASK'     : 0xffff,
 LIBSSH2_HOSTKEY_TYPE = {0: 'UNKNOWN',
                         1: 'RSA',
                         2: 'DSS'}
- 
+
+def check_null(result, ffi, args):
+    if ctypes.cast(result, ctypes.c_void_p).value == None:
+        return None
+    return result
+
 class Ssh2:
     
     #int libssh2_init(int flags);
@@ -126,6 +135,7 @@ class Session:
     
     #int libssh2_channel_free(LIBSSH2_CHANNEL *channel);
     def __del__(self):
+        self.libssh2.libssh2_session_free.argtypes = [ctypes.POINTER(Session.SessionType)]
         self.libssh2.libssh2_session_free.restype = ctypes.c_int
         rc = self.libssh2.libssh2_session_free(self.session)
     
@@ -159,23 +169,25 @@ class Session:
     
     #void libssh2_session_set_blocking(LIBSSH2_SESSION *session, int blocking);
     def set_blocking(self, blocking):
-        self.libssh2.libssh2_set_blocking.argtypes = [ctypes.POINTER(Session.SessionType), ctypes.c_int]
-        self.libssh2.libssh2_set_blocking.restype = None
-        self.libssh2.libssh2_set_blocking(self.session, blocking)
+        self.libssh2.libssh2_session_set_blocking.argtypes = [ctypes.POINTER(Session.SessionType), ctypes.c_int]
+        self.libssh2.libssh2_session_set_blocking.restype = None
+        self.libssh2.libssh2_session_set_blocking(self.session, blocking)
     
     #LIBSSH2_CHANNEL * libssh2_channel_open_ex(LIBSSH2_SESSION *session, const char *channel_type, unsigned int channel_type_len, unsigned int window_size, unsigned int packet_size, const char *message, unsigned int message_len);
     #LIBSSH2_CHANNEL * libssh2_channel_open_session(LIBSSH2_SESSION *session);
     def channel_open(self, channel_type=b"session", window_size=256*1024, packet_size=32768, message=b""):
         self.libssh2.libssh2_channel_open_ex.argtypes = [ctypes.POINTER(Session.SessionType), ctypes.c_char_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_char_p, ctypes.c_uint]
         self.libssh2.libssh2_channel_open_ex.restype = ctypes.POINTER(Channel.ChannelType)
+        self.libssh2.libssh2_channel_open_ex.errcheck = check_null
         channel = self.libssh2.libssh2_channel_open_ex(self.session, channel_type, len(channel_type), window_size, packet_size, message, len(message))
         return Channel(self, channel)
     
     #LIBSSH2_CHANNEL * libssh2_channel_direct_tcpip_ex(LIBSSH2_SESSION *session, const char *host, int port, const char *shost, int sport);
     #LIBSSH2_CHANNEL * libssh2_channel_direct_tcpip(LIBSSH2_SESSION *session, const char *host, int port);
     def direct_tcpip(self, host, port, shost=b"127.0.0.1", sport=22):
-        self.libssh2.libssh2_channel_criect_tcpip_ex.argtypes = [ctypes.POINTER(Session.SessionType), ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
-        self.libssh2.libssh2_channel.direct_tcpip_ex.restype = ctypes.POINTER(Channel.ChannelType)
+        self.libssh2.libssh2_channel_direct_tcpip_ex.argtypes = [ctypes.POINTER(Session.SessionType), ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.libssh2.libssh2_channel_direct_tcpip_ex.restype = ctypes.POINTER(Channel.ChannelType)
+        self.libssh2.libssh2_channel_direct_tcpip_ex.errcheck = check_null
         channel = self.libssh2.libssh2_channel.direct_tcpip_ex(host, port, shost, sport)
         return Channel(self, channel)
     
@@ -183,6 +195,7 @@ class Session:
     def agent_init(self):
         self.libssh2.libssh2_agent_init.argtypes = [ctypes.POINTER(Session.SessionType)]
         self.libssh2.libssh2_agent_init.restype = ctypes.POINTER(Agent.AgentType)
+        self.libssh2.libssh2_agent_init.errcheck = check_null
         agent = self.libssh2.libssh2_agent_init(self.session)
         return Agent(self, agent)
     
@@ -199,6 +212,7 @@ class Session:
     def knownhost_init(self):
         self.libssh2.libssh2_knownhost_init.argtypes = [ctypes.POINTER(Session.SessionType)]
         self.libssh2.libssh2_knownhost_init.restype = ctypes.POINTER(KnownHosts.KnownHostsType)
+        self.libssh2.libssh2_knownhost_init.errcheck = check_null
         knownHosts = self.libssh2.libssh2_knownhost_init(self.session)
         return KnownHosts(self, knownHosts)
     
@@ -244,13 +258,17 @@ class Session:
         stat = " "*1024
         self.libssh2.libssh2_scp_recv.argtypes = [ctypes.POINTER(Session.SessionType), ctypes.c_char_p, ctypes.c_char_p]
         self.libssh2.libssh2_scp_recv.restype = ctypes.POINTER(Channel.ChannelType)
+        self.libssh2.libssh2_scp_recv.errcheck = check_null
         channel = self.libssh2.libssh2_scp_recv(self.session, path, stat)
         return Channel(self, channel)
     
     def sftp_init(self):
         self.libssh2.libssh2_sftp_init.argtypes = [ctypes.POINTER(Session.SessionType)]
         self.libssh2.libssh2_sftp_init.restype = ctypes.POINTER(SFTP.SFTPType)
+        self.libssh2.libssh2_sftp_init.errcheck = check_null
         sftp = self.libssh2.libssh2_sftp_init(self.session)
+        if sftp is None:
+            return None
         return SFTP(self, sftp)
 
 
@@ -515,18 +533,18 @@ class SFTP:
            'TRUNC'  : (1<<4),
            'EXCL'   : (1<<5)}
     
-    S = {'IRWXU' : 700,
-         'IRUSR' : 400,
-         'IWUSR' : 200,
-         'IXUSR' : 100,
-         'IRWXG' : 70,
-         'IRGRP' : 40,
-         'IWGRP' : 20,
-         'IXGRP' : 10,
-         'IRWXO' : 7,
-         'IROTH' : 4,
-         'IWOTH' : 2,
-         'IXOTH' : 1}
+    S = {'IRWXU' : 0000700,
+         'IRUSR' : 0000400,
+         'IWUSR' : 0000200,
+         'IXUSR' : 0000100,
+         'IRWXG' : 0000070,
+         'IRGRP' : 0000040,
+         'IWGRP' : 0000020,
+         'IXGRP' : 0000010,
+         'IRWXO' : 0000007,
+         'IROTH' : 0000004,
+         'IWOTH' : 0000002,
+         'IXOTH' : 0000001}
     
     def __init__(self, parent, sftp):
         self.parent = parent
@@ -544,13 +562,30 @@ class SFTP:
     def open_ex(self, path, flags, mode, open_type):
         self.libssh2.libssh2_sftp_open_ex.argtypes = [ctypes.POINTER(SFTP.SFTPType), ctypes.c_char_p, ctypes.c_uint, ctypes.c_ulong, ctypes.c_long, ctypes.c_int]
         self.libssh2.libssh2_sftp_open_ex.restype = ctypes.POINTER(SFTPHandle.SFTPHandleType)
+        self.libssh2.libssh2_sftp_open_ex.errcheck = check_null
         sftpHandle = self.libssh2.libssh2_sftp_open_ex(self.sftp, path, len(path), flags, mode, open_type)
         return sftpHandle
 
     #LIBSSH2_SFTP_HANDLE * libssh2_sftp_open(LIBSSH2_SFTP *sftp, const char *path, unsigned long flags, long mode);
     def openfile(self, path, flags=FXF['READ'], mode=0):
         sftpHandle = self.open_ex(path, flags, mode, SFTP.OPEN['FILE'])
+        if sftpHandle is None:
+            return None
+        #print sftpHandle
         return SFTPHandle(self, sftpHandle, path)
+
+    def opendir(self, path):
+        sftpHandle = self.open_ex(path, 0, 0, SFTP.OPEN['DIR'])
+        if sftpHandle is None:
+            return None
+        return SFTPHandle(self, sftpHandle, path)
+
+    def unlink(self, path):
+        self.libssh2.libssh2_sftp_unlink_ex.argtypes = [ctypes.POINTER(SFTP.SFTPType),
+                                                        ctypes.c_char_p,
+                                                        ctypes.c_size_t]
+        self.libssh2.libssh2_sftp_unlink_ex.restype = ctypes.c_int
+        return self.libssh2.libssh2_sftp_unlink_ex(self.sftp, path, len(path))
     
     #unsigned long libssh2_sftp_last_error(LIBSSH2_SFTP *sftp);
     def last_error(self):
@@ -577,6 +612,8 @@ class SFTPHandle:
     SEEK_SET = 0
     SEEK_CUR = 1
     SEEK_END = 2
+
+    ReadDirResult = namedtuple('ReadDirResult', ['error', 'path', 'long_path', 'attrs'])
     
     def __init__(self, parent, sftpHandle, path):
         self.parent = parent
@@ -637,6 +674,37 @@ class SFTPHandle:
     
     def asFile(self):
         return SftpFile(self)
+
+    def readdir(self):
+        attrs = SFTPHandle.SFTPAttributes()
+        self.libssh2.libssh2_sftp_readdir_ex.argtypes = [ctypes.POINTER(SFTPHandle.SFTPHandleType),
+                                                         ctypes.c_char_p,
+                                                         ctypes.c_size_t,
+                                                         ctypes.c_char_p,
+                                                         ctypes.c_size_t,
+                                                         ctypes.POINTER(SFTPHandle.SFTPAttributes)]
+        self.libssh2.libssh2_sftp_readdir_ex.restype = ctypes.c_int
+        sz = 512
+        name_buffer = ctypes.create_string_buffer(sz+1)
+        long_buffer = ctypes.create_string_buffer(sz+1)
+        retval = self.libssh2.libssh2_sftp_readdir_ex(self.sftpHandle,
+                                                      name_buffer,
+                                                      sz,
+                                                      long_buffer,
+                                                      sz,
+                                                      attrs)
+        length = 0
+        if retval > 0:
+            length = retval
+            retval = 1
+        else:
+            if retval<0:
+                print(LIBSSH2_ERROR[retval])
+        return SFTPHandle.ReadDirResult(retval,
+                                        name_buffer.value,
+                                        long_buffer.value,
+                                        attrs)
+                          
     
 
 class SftpFile:
