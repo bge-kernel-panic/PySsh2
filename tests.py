@@ -4,14 +4,16 @@ import socket
 import ctypes
 import pdb
 import time
+import getpass
+
 from pyssh2 import Ssh2
 
 SLEEP_TIME = 0.6
 
 HOST_NAME = "localhost"
-USER_NAME = "sshtest"
-PASS""
-PORT = 10022
+USER_NAME = None
+PASSWORD = None
+PORT = 22
 
 class TestPySSH2(unittest.TestCase):
 
@@ -64,9 +66,10 @@ class TestSSH2(unittest.TestCase):
     def test_shell_read(self):
         shell = self.ssh.shell()
         motd = shell.read()
-        # motd starts with "Welcome"
-        #pdb.set_trace()
-        self.assertGreaterEqual(motd.find("Welcome"), 0)
+        # grab the actual motd from the filesystem
+        with open('/etc/motd') as motd_file:
+            motd_orig = motd_file.read()
+        self.assertGreaterEqual(0, motd.find(motd_orig))
 
     def test_shell_write(self):
         #pdb.set_trace()
@@ -89,5 +92,9 @@ class TestSSH2(unittest.TestCase):
     
 
 if __name__ == "__main__":
+    if USER_NAME is None:
+        USER_NAME = getpass.getuser()
+    if PASSWORD is None:
+        PASSWORD = getpass.getpass('Enter password for {}:'.format(USER_NAME))
     unittest.main()
     

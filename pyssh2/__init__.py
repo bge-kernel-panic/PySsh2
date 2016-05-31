@@ -533,18 +533,18 @@ class SFTP:
            'TRUNC'  : (1<<4),
            'EXCL'   : (1<<5)}
     
-    S = {'IRWXU' : 0000700,
-         'IRUSR' : 0000400,
-         'IWUSR' : 0000200,
-         'IXUSR' : 0000100,
-         'IRWXG' : 0000070,
-         'IRGRP' : 0000040,
-         'IWGRP' : 0000020,
-         'IXGRP' : 0000010,
-         'IRWXO' : 0000007,
-         'IROTH' : 0000004,
-         'IWOTH' : 0000002,
-         'IXOTH' : 0000001}
+    S = {'IRWXU' : 0o700,
+         'IRUSR' : 0o400,
+         'IWUSR' : 0o200,
+         'IXUSR' : 0o100,
+         'IRWXG' : 0o070,
+         'IRGRP' : 0o040,
+         'IWGRP' : 0o020,
+         'IXGRP' : 0o010,
+         'IRWXO' : 0o007,
+         'IROTH' : 0o004,
+         'IWOTH' : 0o002,
+         'IXOTH' : 0o001}
     
     def __init__(self, parent, sftp):
         self.parent = parent
